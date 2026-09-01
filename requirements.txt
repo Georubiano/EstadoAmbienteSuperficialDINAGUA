@@ -1,0 +1,5 @@
+streamlit>=1.38
+pandas>=2.0
+plotly>=5.24
+matplotlib>=3.8
+pydeck>=0.9

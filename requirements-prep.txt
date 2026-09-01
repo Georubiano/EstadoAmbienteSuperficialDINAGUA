@@ -1,0 +1,5 @@
+# Dependencias SOLO para correr prepare_data.py (no hacen falta para desplegar la app).
+pandas>=2.0
+openpyxl>=3.1
+geopandas>=0.14
+shapely>=2.0
