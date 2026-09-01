@@ -233,7 +233,7 @@ if df_mapa.empty:
     st.warning("No hay puntos georreferenciados para los filtros seleccionados.")
 else:
     modo_mapa = st.radio(
-        "Colorear por:",
+        "Mapa",
         ["Tipo de uso", "Tipo de obra", "Volumen"],
         horizontal=True,
     )
@@ -312,7 +312,7 @@ st.markdown("---")
 # --------------------------------------------------------------------------
 # Detalle por cuenca — obras por tipo
 # --------------------------------------------------------------------------
-st.subheader("Obras por tipo")
+st.subheader("Cantidad de obras")
 opciones = ["— Total de la selección —"] + [
     f"{row.nombre_cuenca} (#{row.codcuenca})" for row in por_cuenca.itertuples()
 ]
