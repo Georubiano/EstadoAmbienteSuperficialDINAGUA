@@ -31,14 +31,14 @@ DATA_DIR = Path(__file__).parent / "data"
 # App 100% modo oscuro: template de Plotly + tema de Streamlit (.streamlit/config.toml)
 pio.templates.default = "plotly_dark"
 
-# Orden fijo de tipos de obra (Toma se agrupó con Reservorio: solo 4 casos en todo el país)
+# Orden fijo de tipos de obra
 TIPOS_ORDER = [
     "Represa Grande", "Represa Mediana", "Represa Chica",
     "Tajamar Grande", "Tajamar Mediano", "Tajamar Chico",
     "Tanque Excavado", "Reservorio/Otros",
 ]
 
-# Paleta categórica (cuenca nivel 1) — orden fijo, no ciclar colores (pasos "dark" de la paleta)
+# Paleta categórica (cuenca nivel 1)
 N1_COLORS = {
     "Río Uruguay": "#3987e5",
     "Río de la Plata": "#d95926",
@@ -47,11 +47,13 @@ N1_COLORS = {
     "Río Negro": "#d55181",
     "Santa Lucía": "#2fa72f",
 }
-SEQ_SCALE = [  # rampa secuencial (un solo hue, claro -> oscuro) para el mapa
+
+# Rampa secuencial para el mapa coroplético
+SEQ_SCALE = [
     "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b",
 ]
 
-# Paleta categórica de 8 colores (orden fijo, un hue por tipo de obra — no se cicla)
+# Paleta categórica de 8 colores para tipos de obra
 TIPO_COLORS = {
     "Represa Grande": "#3987e5",
     "Represa Mediana": "#d95926",
@@ -65,20 +67,16 @@ TIPO_COLORS = {
 
 
 def hex_a_rgba(hex_color, alpha=200):
-    """'#3987e5' -> [57, 135, 229, 200] (para las capas de pydeck)."""
     h = hex_color.lstrip("#")
     return [int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), alpha]
 
 
 TIPO_COLORS_RGBA = {k: hex_a_rgba(v) for k, v in TIPO_COLORS.items()}
 
-# fondo oscuro para los dos mapas (CartoDB, no necesita token de API)
 MAPA_ESTILO = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
-MAPA_ESTILO_CHOROPLETH = "carto-darkmatter-nolabels"  # estilo propio de px.choropleth_map
 
 
 def miles(n):
-    """1234567 -> '1.234.567' (separador de miles a la uruguaya)."""
     return f"{n:,.0f}".replace(",", ".")
 
 
@@ -100,7 +98,6 @@ def load_data():
     with open(DATA_DIR / "cuencas_n2.geojson", encoding="utf-8") as f:
         geojson = json.load(f)
 
-    # nombre y área de cada cuenca nivel 2, desde el geojson
     props = pd.DataFrame([feat["properties"] for feat in geojson["features"]])
     props["codcuenca"] = props["codcuenca"].astype(int)
     props = props.rename(columns={"nombre_cue": "nombre_cuenca", "area": "area_km2"})
@@ -111,7 +108,6 @@ def load_data():
 
 df, geojson, cuencas_meta = load_data()
 
-# nombre de cuenca nivel 2 por código (incluye el 46, que no tiene polígono)
 nombre_por_codigo = dict(zip(cuencas_meta["codcuenca"], cuencas_meta["nombre_cuenca"]))
 n1_por_codigo = df.groupby("codcuenca")["cuenca_n1"].agg(lambda s: s.mode().iat[0]).to_dict()
 codigos_sin_poligono = sorted(set(df["codcuenca"]) - set(cuencas_meta["codcuenca"]))
@@ -132,17 +128,10 @@ search = st.sidebar.text_input("Buscar cuenca nivel 2 (nombre o código)")
 st.sidebar.markdown("---")
 st.sidebar.caption(
     "Fuente: 6 planillas de solicitudes de aprovechamiento hídrico "
-    "(Río Uruguay, Río de la Plata, Océano Atlántico, Laguna Merín, "
-    "Río Negro, Santa Lucía) + shapefile de cuencas nivel 2 (capa c098), "
-    "unidos por el código de cuenca nivel 2. El volumen se asume en m³ "
-    "(no viene con unidad explícita en el origen)."
+    "y shapefile de cuencas nivel 2 (capa c098)."
 )
 if codigos_sin_poligono:
-    st.sidebar.caption(
-        f"Nota: la cuenca {codigos_sin_poligono} tiene solicitudes registradas "
-        "pero no tiene polígono propio en el shapefile provisto, así que no "
-        "aparece en el mapa (sí en la tabla y en los rankings)."
-    )
+    st.sidebar.caption(f"Nota: la cuenca {codigos_sin_poligono} no tiene polígono en el shapefile.")
 
 dff = df[df["cuenca_n1"].isin(n1_selected)].copy()
 if search:
@@ -195,55 +184,41 @@ c1.metric("Volumen total", f"{dff['volumen'].sum() / 1e6:,.1f} hm³".replace(","
 c2.metric("Obras registradas", f"{len(dff):,}".replace(",", "."))
 c3.metric("Cuencas nivel 2", f"{por_cuenca.shape[0]}")
 
+st.markdown("---")
+
+
+# --------------------------------------------------------------------------
+# Mapa Coroplético (GeoJSON Nivel 2)
+# --------------------------------------------------------------------------
+st.subheader("Volumen otorgado por cuenca")
+
+map_df = por_cuenca[por_cuenca["codcuenca"].isin(
+    [f["properties"]["codcuenca"] for f in geojson["features"]]
+)]
+
+fig_map = px.choropleth(
+    map_df,
+    geojson=geojson,
+    locations="codcuenca",
+    featureidkey="properties.codcuenca",
+    color="volumen",
+    color_continuous_scale=SEQ_SCALE,
+    hover_name="nombre_cuenca",
+    hover_data={"codcuenca": True, "volumen": ":,.0f", "n_obras": True},
+)
+fig_map.update_geos(fitbounds="locations", visible=False)
+fig_map.update_layout(
+    margin=dict(l=0, r=0, t=0, b=0),
+    coloraxis_colorbar=dict(title="Volumen (m³)"),
+    height=700,
+)
+st.plotly_chart(fig_map, use_container_width=True)
 
 st.markdown("---")
 
 
 # --------------------------------------------------------------------------
-# Mapa + ranking
-# --------------------------------------------------------------------------
-col_map, col_rank = st.columns([1.05, 0.95])
-
-with col_map:
-    st.subheader("Volumen otorgado por cuenca ")
-    map_df = por_cuenca[por_cuenca["codcuenca"].isin(
-        [f["properties"]["codcuenca"] for f in geojson["features"]]
-    )]
-    # Centro y zoom calculados a partir de los límites del propio geojson.
-    # Fondo oscuro (CartoDB dark-matter), igual que el mapa de puntos de más abajo.
-    lons = [pt[0] for feat in geojson["features"] for ring in feat["geometry"]["coordinates"]
-            for poly in (ring if feat["geometry"]["type"] == "MultiPolygon" else [ring])
-            for pt in poly]
-    lats = [pt[1] for feat in geojson["features"] for ring in feat["geometry"]["coordinates"]
-            for poly in (ring if feat["geometry"]["type"] == "MultiPolygon" else [ring])
-            for pt in poly]
-    center = {"lat": (min(lats) + max(lats)) / 2, "lon": (min(lons) + max(lons)) / 2}
-
-    fig_map = px.choropleth_map(
-        map_df,
-        geojson=geojson,
-        locations="codcuenca",
-        featureidkey="properties.codcuenca",
-        color="volumen",
-        color_continuous_scale=SEQ_SCALE,
-        hover_name="nombre_cuenca",
-        hover_data={"codcuenca": True, "volumen": ":,.0f", "n_obras": True},
-        map_style=MAPA_ESTILO_CHOROPLETH,
-        center=center,
-        zoom=5.2,
-        opacity=0.85,
-    )
-    fig_map.update_layout(
-        margin=dict(l=0, r=0, t=0, b=0),
-        coloraxis_colorbar=dict(title="Volumen (m³)"),
-        height=700,
-    )
-
-st.markdown("---")
-
-
-# --------------------------------------------------------------------------
-# Distribución geográfica de las solicitudes (punto por obra)
+# Distribución geográfica de las solicitudes (puntos)
 # --------------------------------------------------------------------------
 st.header("🗺️ Distribución geográfica de las solicitudes")
 
@@ -263,7 +238,6 @@ else:
         horizontal=True,
     )
 
-    # --- Tipo de uso -----------------------------------------------------
     if modo_mapa == "Tipo de uso":
         usos_unicos = sorted(df_mapa["uso"].dropna().unique())
         tab10 = plt.colormaps["tab10"].resampled(max(len(usos_unicos), 1))
@@ -272,18 +246,6 @@ else:
             r, g, b, _ = tab10(i)
             color_map[uso] = [int(r * 255), int(g * 255), int(b * 255), 200]
         df_mapa["color"] = df_mapa["uso"].apply(lambda u: color_map.get(u, [150, 150, 150, 180]))
-
-        leyenda_html = "<div style='display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;'>"
-        for i, uso in enumerate(usos_unicos):
-            r, g, b, _ = tab10(i)
-            hex_c = "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
-            leyenda_html += (
-                f"<span style='background:{hex_c};color:white;"
-                f"padding:3px 10px;border-radius:12px;font-size:12px;'>{uso}</span>"
-            )
-        leyenda_html += "</div>"
-        st.markdown(leyenda_html, unsafe_allow_html=True)
-        st.caption(f"📍 {miles(len(df_mapa))} registros georreferenciados")
 
         layer = pdk.Layer(
             "ScatterplotLayer", data=df_mapa,
@@ -300,23 +262,10 @@ else:
             height=600,
         )
 
-    # --- Tipo de obra ------------------------------------------------------
     elif modo_mapa == "Tipo de obra":
         df_mapa["color_tipo"] = df_mapa["tipo_obra_agr"].apply(
             lambda t: TIPO_COLORS_RGBA.get(t, [150, 150, 150, 180])
         )
-        tipos_presentes = [t for t in TIPOS_ORDER if t in df_mapa["tipo_obra_agr"].unique()]
-
-        leyenda_html = "<div style='display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;'>"
-        for tipo in tipos_presentes:
-            leyenda_html += (
-                f"<span style='background:{TIPO_COLORS[tipo]};color:white;"
-                f"padding:3px 10px;border-radius:12px;font-size:12px;'>{tipo}</span>"
-            )
-        leyenda_html += "</div>"
-        st.markdown(leyenda_html, unsafe_allow_html=True)
-        st.caption(f"📍 {miles(len(df_mapa))} registros georreferenciados")
-
         layer = pdk.Layer(
             "ScatterplotLayer", data=df_mapa,
             get_position=["lon", "lat"], get_color="color_tipo",
@@ -332,7 +281,6 @@ else:
             height=600,
         )
 
-    # --- Volumen (color + tamaño proporcional) ------------------------------
     else:
         df_mapa_vol = df_mapa.dropna(subset=["volumen"]).copy()
         vol_p95 = df_mapa_vol["volumen"].quantile(0.95) or 1
@@ -342,32 +290,6 @@ else:
             lambda n: [int(c * 255) for c in cmap_vol(n)[:3]] + [200]
         )
         df_mapa_vol["radio"] = (1500 + df_mapa_vol["vol_norm"] * 6500).astype(int)
-
-        vol_min = int(df_mapa_vol["volumen"].min())
-        vol_med = int(df_mapa_vol["volumen"].median())
-        vol_max = int(vol_p95)
-        r_b, g_b, b_b, _ = cmap_vol(0.0)
-        r_m, g_m, b_m, _ = cmap_vol(0.5)
-        r_a, g_a, b_a, _ = cmap_vol(1.0)
-        hex_b = "#{:02x}{:02x}{:02x}".format(int(r_b * 255), int(g_b * 255), int(b_b * 255))
-        hex_m = "#{:02x}{:02x}{:02x}".format(int(r_m * 255), int(g_m * 255), int(b_m * 255))
-        hex_a = "#{:02x}{:02x}{:02x}".format(int(r_a * 255), int(g_a * 255), int(b_a * 255))
-
-        st.markdown(
-            f"<div style='display:flex;flex-wrap:wrap;align-items:center;gap:8px;"
-            f"margin-bottom:12px;font-size:12px;'>"
-            f"<span>Volumen:</span>"
-            f"<span style='background:{hex_b};color:white;padding:3px 10px;"
-            f"border-radius:12px;'>Bajo (&lt;{miles(vol_min)} m³)</span>"
-            f"<span style='background:{hex_m};color:white;padding:3px 10px;"
-            f"border-radius:12px;'>Medio (~{miles(vol_med)} m³)</span>"
-            f"<span style='background:{hex_a};color:white;padding:3px 10px;"
-            f"border-radius:12px;'>Alto (&gt;{miles(vol_max)} m³)</span>"
-            f"<span style='color:#aaa;'>Tamaño proporcional</span>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-        st.caption(f"📍 {miles(len(df_mapa_vol))} registros con volumen georreferenciados")
 
         layer = pdk.Layer(
             "ScatterplotLayer", data=df_mapa_vol,
@@ -425,7 +347,7 @@ st.markdown("---")
 
 
 # --------------------------------------------------------------------------
-# Obras por tipo, cuenca por cuenca (grilla con las 47/48 cuencas)
+# Obras por tipo, cuenca por cuenca
 # --------------------------------------------------------------------------
 por_cuenca_ord = por_cuenca.copy()
 por_cuenca_ord["label"] = (
@@ -437,12 +359,7 @@ n1_presentes = [n1 for n1 in N1_COLORS if n1 in por_cuenca_ord["cuenca_n1"].uniq
 orden_label_global = por_cuenca_ord["label"].tolist()
 altura_todas = len(por_cuenca_ord) * 28 + len(n1_presentes) * 60
 
-st.markdown("---")
-
-st.header("🔢 Cantidad de derechos otorgados por cuenca nivel 2 ")
-st.caption(
-    "Las mismas cuencas, ahora por cantidad total de obras (en vez de volumen)."
-)
+st.header("🔢 Cantidad de derechos otorgados por cuenca nivel 2")
 fig_obras_todas = px.bar(
     por_cuenca_ord,
     x="n_obras",
