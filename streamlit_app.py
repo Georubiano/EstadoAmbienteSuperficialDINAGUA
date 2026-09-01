@@ -219,7 +219,7 @@ with col_map:
             for pt in poly]
     center = {"lat": (min(lats) + max(lats)) / 2, "lon": (min(lons) + max(lons)) / 2}
 
-    fig_map = px.choropleth(
+    fig_map = px.choropleth_map(
         map_df,
         geojson=geojson,
         locations="codcuenca",
@@ -228,8 +228,11 @@ with col_map:
         color_continuous_scale=SEQ_SCALE,
         hover_name="nombre_cuenca",
         hover_data={"codcuenca": True, "volumen": ":,.0f", "n_obras": True},
+        map_style=MAPA_ESTILO_CHOROPLETH,
+        center=center,
+        zoom=5.2,
+        opacity=0.85,
     )
-    fig_map.update_geos(fitbounds="locations", visible=False)
     fig_map.update_layout(
         margin=dict(l=0, r=0, t=0, b=0),
         coloraxis_colorbar=dict(title="Volumen (m³)"),
