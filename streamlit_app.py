@@ -310,7 +310,7 @@ st.markdown("---")
 
 
 # --------------------------------------------------------------------------
-# Detalle por cuenca — obras por tipo
+# Detalle por cuenca — obras por tipo y su desglose por uso
 # --------------------------------------------------------------------------
 st.subheader("Cantidad de obras")
 opciones = ["— Total de la selección —"] + [
@@ -319,29 +319,43 @@ opciones = ["— Total de la selección —"] + [
 elegido = st.selectbox("Elegí una cuenca nivel 2 (o dejá el total agregado)", opciones)
 
 if elegido == opciones[0]:
-    tipo_totales = tipo_por_cuenca.sum(axis=0).reindex(TIPOS_ORDER, fill_value=0)
+    dff_sel = dff
     titulo = "Total de la selección actual"
 else:
     cod = int(elegido.split("#")[-1].rstrip(")"))
-    tipo_totales = tipo_por_cuenca.loc[cod].reindex(TIPOS_ORDER, fill_value=0) if cod in tipo_por_cuenca.index else pd.Series(0, index=TIPOS_ORDER)
+    dff_sel = dff[dff["codcuenca"] == cod] if cod in dff["codcuenca"].values else pd.DataFrame(columns=dff.columns)
     titulo = elegido
 
-fig_tipo = go.Figure(go.Bar(
-    x=tipo_totales.values,
-    y=tipo_totales.index,
-    orientation="h",
-    marker_color="#2a78d6",
-    text=tipo_totales.values,
-    textposition="outside",
-))
-fig_tipo.update_layout(
-    title=titulo,
-    height=380,
-    margin=dict(l=0, r=10, t=40, b=0),
-    xaxis_title="Cantidad de obras",
-    yaxis=dict(autorange="reversed"),
-)
-st.plotly_chart(fig_tipo, use_container_width=True)
+if dff_sel.empty:
+    st.warning("No hay datos para esta cuenca con los filtros actuales.")
+else:
+    # Pivot para cruzar tipo de obra con uso
+    pivot_usos = (
+        dff_sel.pivot_table(
+            index="tipo_obra_agr", columns="uso", values="volumen", aggfunc="count", fill_value=0
+        )
+        .reindex(index=TIPOS_ORDER, fill_value=0)
+    )
+
+    fig_tipo = go.Figure()
+    for uso_col in pivot_usos.columns:
+        fig_tipo.add_trace(go.Bar(
+            x=pivot_usos[uso_col],
+            y=pivot_usos.index,
+            name=str(uso_col),
+            orientation="h",
+        ))
+
+    fig_tipo.update_layout(
+        barmode="stack",
+        title=titulo,
+        height=450,
+        margin=dict(l=0, r=10, t=50, b=0),
+        xaxis_title="Cantidad de obras",
+        yaxis=dict(autorange="reversed"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    st.plotly_chart(fig_tipo, use_container_width=True)
 
 st.markdown("---")
 
