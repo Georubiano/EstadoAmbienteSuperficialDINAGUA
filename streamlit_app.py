@@ -95,18 +95,7 @@ st.set_page_config(
 @st.cache_data
 def load_data():
     df = pd.read_csv(DATA_DIR / "solicitudes_limpio.csv")
-    df["codcuenca"] = df["codcuenca"].astype(int)
-
-    with open(DATA_DIR / "cuencas_n2.geojson", encoding="utf-8") as f:
-        geojson = json.load(f)
-
-    # nombre y área de cada cuenca nivel 2, desde el geojson
-    props = pd.DataFrame([feat["properties"] for feat in geojson["features"]])
-    props["codcuenca"] = props["codcuenca"].astype(int)
-    props = props.rename(columns={"nombre_cue": "nombre_cuenca", "area": "area_km2"})
-    props = props[["codcuenca", "nombre_cuenca", "area_km2", "cabecera"]]
-
-    return df, geojson, props
+    ...
 
 
 df, geojson, cuencas_meta = load_data()
