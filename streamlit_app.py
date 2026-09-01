@@ -238,7 +238,6 @@ with col_map:
         coloraxis_colorbar=dict(title="Volumen (m³)"),
         height=560,
     )
-    st.plotly_chart(fig_map, use_container_width=True)
 
 st.markdown("---")
 
