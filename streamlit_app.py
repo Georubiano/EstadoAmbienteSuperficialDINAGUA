@@ -92,10 +92,52 @@ st.set_page_config(
 # --------------------------------------------------------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv(DATA_DIR / "solicitudes_limpio.csv")
-    df["codcuenca"] = df["codcuenca"].astype(int)
+    # Cargar los 6 archivos Excel procesados directamente desde la raíz
+    excel_files = [
+        "1_Rio_Uruguay_procesado.xlsx",
+        "2_Rio_de_la_Plata_procesado.xlsx",
+        "3_Oceano_Atlantico_procesado.xlsx",
+        "4_Laguna_Merin_procesado.xlsx",
+        "5_Rio_Negro_procesado.xlsx",
+        "6_Santa_Lucia_procesado.xlsx"
+    ]
 
-    with open(DATA_DIR / "cuencas_n2.geojson", encoding="utf-8") as f:
+    dfs = []
+    for f in excel_files:
+        if Path(f).exists():
+            temp_df = pd.read_excel(f)
+            dfs.append(temp_df)
+
+    df = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
+    # Normalizar nombres de columnas clave para evitar problemas de tildes o mayúsculas
+    df.columns = [c.strip() for c in df.columns]
+
+    # Renombrar columnas para estandarizar con el código de la app
+    rename_map = {}
+    for col in df.columns:
+        col_lower = col.lower()
+        if "cuencas de nivel 2" in col_lower or "nivel 2" in col_lower or "codcuenca" in col_lower:
+            rename_map[col] = "codcuenca"
+        elif "cuenca de nivel 1" in col_lower or "nivel 1" in col_lower:
+            rename_map[col] = "cuenca_n1"
+        elif col_lower == "volumen":
+            rename_map[col] = "volumen"
+        elif "embalse" in col_lower and "vol" in col_lower:
+            rename_map[col] = "volumen_embalse"
+        elif col_lower == "latitud":
+            rename_map[col] = "lat"
+        elif col_lower == "longitud":
+            rename_map[col] = "lon"
+        elif col_lower == "uso":
+            rename_map[col] = "uso"
+        elif "tipo de obra" in col_lower:
+            rename_map[col] = "tipo_obra_agr"
+
+    df = df.rename(columns=rename_map)
+    df["codcuenca"] = pd.to_numeric(df["codcuenca"], errors="coerce").fillna(0).astype(int)
+
+    with open("cuencas_n2.geojson", encoding="utf-8") as f:
         geojson = json.load(f)
 
     props = pd.DataFrame([feat["properties"] for feat in geojson["features"]])
@@ -109,7 +151,8 @@ def load_data():
 df, geojson, cuencas_meta = load_data()
 
 nombre_por_codigo = dict(zip(cuencas_meta["codcuenca"], cuencas_meta["nombre_cuenca"]))
-n1_por_codigo = df.groupby("codcuenca")["cuenca_n1"].agg(lambda s: s.mode().iat[0]).to_dict()
+n1_por_codigo = df.groupby("codcuenca")["cuenca_n1"].agg(
+    lambda s: s.mode().iat[0] if not s.empty else "Desconocido").to_dict()
 codigos_sin_poligono = sorted(set(df["codcuenca"]) - set(cuencas_meta["codcuenca"]))
 
 
@@ -148,17 +191,13 @@ if dff.empty:
 
 
 # --------------------------------------------------------------------------
+# Agregaciones (Nivel 2)
 # --------------------------------------------------------------------------
-# Agregaciones
-# --------------------------------------------------------------------------
-# Detectar el nombre exacto de la columna de embalse (maneja tildes y mayúsculas)
-col_embalse = next((c for c in dff.columns if "embalse" in c.lower() or "volúmen" in c.lower()), None)
-
 por_cuenca = (
     dff.groupby("codcuenca")
     .agg(
         volumen=("volumen", "sum"),
-        volumen_embalse=(col_embalse, "sum") if col_embalse else ("volumen", "sum"),
+        volumen_embalse=("volumen_embalse", "sum") if "volumen_embalse" in dff.columns else ("volumen", "sum"),
         n_obras=("volumen", "count")
     )
     .reset_index()
