@@ -150,6 +150,18 @@ if dff.empty:
 # --------------------------------------------------------------------------
 # Agregaciones
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Agregaciones
+# --------------------------------------------------------------------------
+por_cuenca = (
+    dff.groupby("codcuenca")
+    .agg(
+        volumen=("volumen", "sum"),
+        volumen_embalse=("Volúmen de Embalse", "sum"), if "Volúmen de Embalse" in dff.columns else ("volumen", "sum"), # por seguridad si cambia el nombre
+        n_obras=("volumen", "count")
+    )
+    .reset_index()
+)
 por_cuenca = (
     dff.groupby("codcuenca")
     .agg(volumen=("volumen", "sum"), n_obras=("volumen", "count"))
@@ -469,17 +481,19 @@ st.markdown("---")
 
 
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Tabla completa
 # --------------------------------------------------------------------------
 st.subheader("Tabla completa — cuencas nivel 2")
-tabla = por_cuenca[["codcuenca", "nombre_cuenca", "cuenca_n1", "area_km2", "volumen", "n_obras"]].reset_index(drop=True)
-tabla.columns = ["Código", "Cuenca nivel 2", "Cuenca nivel 1", "Área (km²)", "Volumen (m³)", "Obras"]
+tabla = por_cuenca[["codcuenca", "nombre_cuenca", "cuenca_n1", "area_km2", "volumen", "volumen_embalse", "n_obras"]].reset_index(drop=True)
+tabla.columns = ["Código", "Cuenca nivel 2", "Cuenca nivel 1", "Área (km²)", "Volumen (m³)", "Vol. Embalse (m³)", "Obras"]
 st.dataframe(
     tabla,
     use_container_width=True,
     hide_index=True,
     column_config={
         "Volumen (m³)": st.column_config.NumberColumn(format="%.0f"),
+        "Vol. Embalse (m³)": st.column_config.NumberColumn(format="%.0f"),
         "Área (km²)": st.column_config.NumberColumn(format="%.0f"),
     },
 )
@@ -493,3 +507,4 @@ st.download_button(
 
 with st.expander("Ver solicitudes individuales (detalle fila por fila)"):
     st.dataframe(dff, use_container_width=True, hide_index=True)
+
