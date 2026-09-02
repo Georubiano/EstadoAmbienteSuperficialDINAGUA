@@ -186,7 +186,6 @@ c3.metric("Cuencas nivel 2", f"{por_cuenca.shape[0]}")
 
 st.markdown("---")
 
-
 # --------------------------------------------------------------------------
 # Mapa Coroplético (GeoJSON Nivel 2)
 # --------------------------------------------------------------------------
@@ -195,6 +194,26 @@ st.subheader("Volumen otorgado por cuenca")
 map_df = por_cuenca[por_cuenca["codcuenca"].isin(
     [f["properties"]["codcuenca"] for f in geojson["features"]]
 )]
+
+# Leyenda visual para el mapa coroplético de volúmenes (rampa de azules)
+st.markdown(
+    """
+    <div style='display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12px;color:#ccc;'>
+        <span><b>Menor volumen</b></span>
+        <div style='display:flex;height:12px;width:150px;border-radius:4px;overflow:hidden;'>
+            <div style='background:#cde2fb;flex:1;'></div>
+            <div style='background:#9ec5f4;flex:1;'></div>
+            <div style='background:#6da7ec;flex:1;'></div>
+            <div style='background:#3987e5;flex:1;'></div>
+            <div style='background:#256abf;flex:1;'></div>
+            <div style='background:#184f95;flex:1;'></div>
+            <div style='background:#0d366b;flex:1;'></div>
+        </div>
+        <span><b>Mayor volumen</b></span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 fig_map = px.choropleth(
     map_df,
@@ -209,16 +228,15 @@ fig_map = px.choropleth(
 fig_map.update_geos(fitbounds="locations", visible=False)
 fig_map.update_layout(
     margin=dict(l=0, r=0, t=0, b=0),
-    coloraxis_colorbar=dict(title="Volumen (m³)"),
+    coloraxis_showscale=False,  # Ocultamos la barra vertical por defecto para usar la leyenda horizontal limpia
     height=700,
 )
 st.plotly_chart(fig_map, use_container_width=True)
 
 st.markdown("---")
 
-
 # --------------------------------------------------------------------------
-# Distribución geográfica de las solicitudes (puntos)
+# Distribución geográfica de los derechos de uso (puntos)
 # --------------------------------------------------------------------------
 st.header("🗺️ Distribución geográfica de los derechos de uso")
 
@@ -227,7 +245,7 @@ df_mapa["lat"] = pd.to_numeric(df_mapa["lat"], errors="coerce")
 df_mapa["lon"] = pd.to_numeric(df_mapa["lon"], errors="coerce")
 df_mapa = df_mapa[
     df_mapa["lat"].between(-35.5, -30.0) & df_mapa["lon"].between(-59.5, -53.0)
-].dropna(subset=["lat", "lon"])
+    ].dropna(subset=["lat", "lon"])
 
 if df_mapa.empty:
     st.warning("No hay puntos georreferenciados para los filtros seleccionados.")
@@ -242,10 +260,21 @@ else:
         usos_unicos = sorted(df_mapa["uso"].dropna().unique())
         tab10 = plt.colormaps["tab10"].resampled(max(len(usos_unicos), 1))
         color_map = {}
+        leyenda_html = "<div style='display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;'>"
         for i, uso in enumerate(usos_unicos):
             r, g, b, _ = tab10(i)
             color_map[uso] = [int(r * 255), int(g * 255), int(b * 255), 200]
+            hex_c = "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+            leyenda_html += (
+                f"<span style='background:{hex_c};color:white;"
+                f"padding:3px 10px;border-radius:12px;font-size:12px;'>{uso}</span>"
+            )
+        leyenda_html += "</div>"
+
         df_mapa["color"] = df_mapa["uso"].apply(lambda u: color_map.get(u, [150, 150, 150, 180]))
+
+        st.markdown(leyenda_html, unsafe_allow_html=True)
+        st.caption(f"📍 {miles(len(df_mapa))} registros georreferenciados")
 
         layer = pdk.Layer(
             "ScatterplotLayer", data=df_mapa,
@@ -266,6 +295,19 @@ else:
         df_mapa["color_tipo"] = df_mapa["tipo_obra_agr"].apply(
             lambda t: TIPO_COLORS_RGBA.get(t, [150, 150, 150, 180])
         )
+        tipos_presentes = [t for t in TIPOS_ORDER if t in df_mapa["tipo_obra_agr"].unique()]
+
+        leyenda_html = "<div style='display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;'>"
+        for tipo in tipos_presentes:
+            leyenda_html += (
+                f"<span style='background:{TIPO_COLORS[tipo]};color:white;"
+                f"padding:3px 10px;border-radius:12px;font-size:12px;'>{tipo}</span>"
+            )
+        leyenda_html += "</div>"
+
+        st.markdown(leyenda_html, unsafe_allow_html=True)
+        st.caption(f"📍 {miles(len(df_mapa))} registros georreferenciados")
+
         layer = pdk.Layer(
             "ScatterplotLayer", data=df_mapa,
             get_position=["lon", "lat"], get_color="color_tipo",
@@ -291,6 +333,32 @@ else:
         )
         df_mapa_vol["radio"] = (1500 + df_mapa_vol["vol_norm"] * 6500).astype(int)
 
+        vol_min = int(df_mapa_vol["volumen"].min())
+        vol_med = int(df_mapa_vol["volumen"].median())
+        vol_max = int(vol_p95)
+        r_b, g_b, b_b, _ = cmap_vol(0.0)
+        r_m, g_m, b_m, _ = cmap_vol(0.5)
+        r_a, g_a, b_a, _ = cmap_vol(1.0)
+        hex_b = "#{:02x}{:02x}{:02x}".format(int(r_b * 255), int(g_b * 255), int(b_b * 255))
+        hex_m = "#{:02x}{:02x}{:02x}".format(int(r_m * 255), int(g_m * 255), int(b_m * 255))
+        hex_a = "#{:02x}{:02x}{:02x}".format(int(r_a * 255), int(g_a * 255), int(b_a * 255))
+
+        st.markdown(
+            f"<div style='display:flex;flex-wrap:wrap;align-items:center;gap:8px;"
+            f"margin-bottom:12px;font-size:12px;'>"
+            f"<span>Volumen:</span>"
+            f"<span style='background:{hex_b};color:white;padding:3px 10px;"
+            f"border-radius:12px;'>Bajo (&lt;{miles(vol_min)} m³)</span>"
+            f"<span style='background:{hex_m};color:white;padding:3px 10px;"
+            f"border-radius:12px;'>Medio (~{miles(vol_med)} m³)</span>"
+            f"<span style='background:{hex_a};color:white;padding:3px 10px;"
+            f"border-radius:12px;'>Alto (&gt;{miles(vol_max)} m³)</span>"
+            f"<span style='color:#aaa;'>Tamaño proporcional</span>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        st.caption(f"📍 {miles(len(df_mapa_vol))} registros con volumen georreferenciados")
+
         layer = pdk.Layer(
             "ScatterplotLayer", data=df_mapa_vol,
             get_position=["lon", "lat"], get_color="color",
@@ -305,9 +373,6 @@ else:
             ),
             height=600,
         )
-
-st.markdown("---")
-
 # --------------------------------------------------------------------------
 # Detalle por cuenca — cantidad de obras por tipo y uso
 # --------------------------------------------------------------------------
