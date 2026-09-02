@@ -92,36 +92,32 @@ st.set_page_config(
 # --------------------------------------------------------------------------
 @st.cache_data
 def load_data():
-    # Cargar los 6 archivos Excel procesados directamente desde la raíz
-    excel_files = [
-        "1_Rio_Uruguay_procesado.xlsx",
-        "2_Rio_de_la_Plata_procesado.xlsx",
-        "3_Oceano_Atlantico_procesado.xlsx",
-        "4_Laguna_Merin_procesado.xlsx",
-        "5_Rio_Negro_procesado.xlsx",
-        "6_Santa_Lucia_procesado.xlsx"
-    ]
+    excel_files = {
+        "1_Rio_Uruguay_procesado.xlsx": "Río Uruguay",
+        "2_Rio_de_la_Plata_procesado.xlsx": "Río de la Plata",
+        "3_Oceano_Atlantico_procesado.xlsx": "Océano Atlántico",
+        "4_Laguna_Merin_procesado.xlsx": "Laguna Merín",
+        "5_Rio_Negro_procesado.xlsx": "Río Negro",
+        "6_Santa_Lucia_procesado.xlsx": "Santa Lucía"
+    }
 
     dfs = []
-    for f in excel_files:
-        if Path(f).exists():
-            temp_df = pd.read_excel(f)
+    for filename, n1_name in excel_files.items():
+        if Path(filename).exists():
+            temp_df = pd.read_excel(filename)
+            temp_df["cuenca_n1"] = n1_name
             dfs.append(temp_df)
 
     df = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
-
-    # Normalizar nombres de columnas clave para evitar problemas de tildes o mayúsculas
     df.columns = [c.strip() for c in df.columns]
 
-    # Renombrar columnas para estandarizar con el código de la app
+    # Mapeo exacto de columnas de los Excel
     rename_map = {}
     for col in df.columns:
         col_lower = col.lower()
-        if "cuencas de nivel 2" in col_lower or "nivel 2" in col_lower or "codcuenca" in col_lower:
+        if "codigo cuencas de nivel 2" in col_lower:
             rename_map[col] = "codcuenca"
-        elif "cuenca de nivel 1" in col_lower or "nivel 1" in col_lower:
-            rename_map[col] = "cuenca_n1"
-        elif col_lower == "volumen":
+        elif "volumen" == col_lower:
             rename_map[col] = "volumen"
         elif "embalse" in col_lower and "vol" in col_lower:
             rename_map[col] = "volumen_embalse"
