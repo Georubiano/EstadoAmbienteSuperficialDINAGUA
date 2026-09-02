@@ -389,11 +389,57 @@ else:
 # --------------------------------------------------------------------------
 # Detalle por cuenca — cantidad de obras por tipo y uso
 # --------------------------------------------------------------------------
-st.subheader("Cantidad de obras")
+st.subheader("Cantidad de obras", divider="blue")
+
+# FILA 1: CUENCAS NIVEL 1 (ARRIBA)
+st.markdown("**Cuencas Nivel 1**")
+
+pivot_n1 = (
+    dff.pivot_table(
+        index="cuenca_n1", columns="uso", values="volumen", aggfunc="count", fill_value=0
+    )
+)
+pivot_n1 = pivot_n1.reindex([n1 for n1 in N1_COLORS if n1 in pivot_n1.index], fill_value=0)
+
+usos_n1 = sorted(dff["uso"].dropna().unique())
+tab10_n1 = plt.colormaps["tab10"].resampled(max(len(usos_n1), 1))
+
+fig_n1 = go.Figure()
+for i, uso_col in enumerate(pivot_n1.columns):
+    r, g, b, _ = tab10_n1(i)
+    hex_color = "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+    fig_n1.add_trace(go.Bar(
+        x=pivot_n1[uso_col],
+        y=pivot_n1.index,
+        name=str(uso_col),
+        orientation="h",
+        marker_color=hex_color,
+    ))
+
+fig_n1.update_layout(
+    barmode="stack",
+    title="Obras por Cuenca Nivel 1",
+    height=400,
+    margin=dict(l=0, r=10, t=50, b=0),
+    xaxis_title="Cantidad de obras",
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    font=dict(color="#262730", size=12),
+    title_font=dict(color="#3987e5", size=14),
+    paper_bgcolor="#ffffff",
+    plot_bgcolor="#f8f9fa",
+)
+fig_n1.update_xaxes(showgrid=True, gridwidth=1, gridcolor='#ddd', title_font=dict(color="#262730", size=12), tickfont=dict(color="#262730", size=11))
+fig_n1.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#ddd', title_font=dict(color="#262730", size=12), tickfont=dict(color="#262730", size=11))
+st.plotly_chart(fig_n1, use_container_width=True)
+
+st.markdown("---")
+
+# FILA 2: CUENCAS NIVEL 2 (ABAJO)
+st.markdown("**Cuencas Nivel 2**")
 opciones = ["— Total de la selección —"] + [
     f"{row.nombre_cuenca} (#{row.codcuenca})" for row in por_cuenca.itertuples()
 ]
-elegido = st.selectbox("Elegí una cuenca nivel 2 (o dejá el total agregado)", opciones)
+elegido = st.selectbox("Elegí una cuenca nivel 2", opciones, key="cuenca_n2")
 
 if elegido == opciones[0]:
     dff_sel = dff
@@ -433,16 +479,21 @@ else:
     fig_tipo.update_layout(
         barmode="stack",
         title=titulo,
-        height=450,
+        height=400,
         margin=dict(l=0, r=10, t=50, b=0),
         xaxis_title="Cantidad de obras",
         yaxis=dict(autorange="reversed"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        font=dict(color="#262730", size=12),
+        title_font=dict(color="#3987e5", size=14),
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#f8f9fa",
     )
+    fig_tipo.update_xaxes(showgrid=True, gridwidth=1, gridcolor='#ddd', title_font=dict(color="#262730", size=12), tickfont=dict(color="#262730", size=11))
+    fig_tipo.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#ddd', title_font=dict(color="#262730", size=12), tickfont=dict(color="#262730", size=11))
     st.plotly_chart(fig_tipo, use_container_width=True)
 
 st.markdown("---")
-
 # --------------------------------------------------------------------------
 # Obras por tipo, cuenca por cuenca
 # --------------------------------------------------------------------------
