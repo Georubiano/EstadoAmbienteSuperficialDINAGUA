@@ -220,7 +220,7 @@ st.markdown("---")
 # --------------------------------------------------------------------------
 # Distribución geográfica de las solicitudes (puntos)
 # --------------------------------------------------------------------------
-st.header("🗺️ Distribución geográfica de las solicitudes")
+st.header("🗺️ Distribución geográfica de los derechos de uso")
 
 df_mapa = dff[["lat", "lon", "uso", "volumen", "tipo_obra_agr"]].copy()
 df_mapa["lat"] = pd.to_numeric(df_mapa["lat"], errors="coerce")
