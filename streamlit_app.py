@@ -6,7 +6,7 @@ el volumen de embalse y la cantidad de obras por tipo y uso.
 
 Datos de entrada:
   - Archivos Excel procesados en la raíz (.xlsx)
-  - cuencas_n2.geojson : polígonos de las 48 cuencas nivel 2
+  - cuencas_n2.geojson : polígonos de las 48 cuencas nivel 2 (opcional)
 
 Ejecutar localmente:
     streamlit run streamlit_app.py
@@ -106,7 +106,7 @@ def load_data():
     df = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
     df.columns = [c.strip() for c in df.columns]
 
-    # Mapeo flexible de columnas clave
+    # Mapeo flexible de columnas clave asegurando detección de nivel 2 y volúmenes
     rename_map = {}
     for col in df.columns:
         col_lower = col.lower()
@@ -152,7 +152,14 @@ def load_data():
         props = props.rename(columns={"nombre_cue": "nombre_cuenca", "area": "area_km2"})
         props = props[["codcuenca", "nombre_cuenca", "area_km2", "cabecera"]]
     else:
-        props = pd.DataFrame(columns=["codcuenca", "nombre_cuenca", "area_km2", "cabecera"])
+        # Generar metadatos básicos de cuencas desde el propio DataFrame si no hay GeoJSON
+        cods_unicos = df["codcuenca"].unique()
+        props = pd.DataFrame({
+            "codcuenca": cods_unicos,
+            "nombre_cuenca": [f"Cuenca #{c}" for c in cods_unicos],
+            "area_km2": 0.0,
+            "cabecera": ""
+        })
 
     return df, geojson, props
 
@@ -178,8 +185,7 @@ search = st.sidebar.text_input("Buscar cuenca nivel 2 (nombre o código)")
 
 st.sidebar.markdown("---")
 st.sidebar.caption(
-    "Fuente: Planillas procesadas de solicitudes de aprovechamiento hídrico "
-    "y shapefile de cuencas nivel 2."
+    "Fuente: Planillas procesadas de solicitudes de aprovechamiento hídrico."
 )
 
 dff = df[df["cuenca_n1"].isin(n1_selected)].copy() if not df.empty else df
@@ -244,50 +250,49 @@ st.markdown("---")
 # --------------------------------------------------------------------------
 # Mapa Coroplético (GeoJSON Nivel 2)
 # --------------------------------------------------------------------------
-st.subheader("Volumen otorgado por cuenca")
+if geojson["features"]:
+    st.subheader("Volumen otorgado por cuenca")
+    map_df = por_cuenca[por_cuenca["codcuenca"].isin(
+        [f["properties"]["codcuenca"] for f in geojson["features"]]
+    )]
 
-map_df = por_cuenca[por_cuenca["codcuenca"].isin(
-    [f["properties"]["codcuenca"] for f in geojson["features"]]
-)]
-
-st.markdown(
-    """
-    <div style='display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12px;color:#ccc;'>
-        <span><b>Menor volumen</b></span>
-        <div style='display:flex;height:12px;width:150px;border-radius:4px;overflow:hidden;'>
-            <div style='background:#cde2fb;flex:1;'></div>
-            <div style='background:#9ec5f4;flex:1;'></div>
-            <div style='background:#6da7ec;flex:1;'></div>
-            <div style='background:#3987e5;flex:1;'></div>
-            <div style='background:#256abf;flex:1;'></div>
-            <div style='background:#184f95;flex:1;'></div>
-            <div style='background:#0d366b;flex:1;'></div>
+    st.markdown(
+        """
+        <div style='display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12px;color:#ccc;'>
+            <span><b>Menor volumen</b></span>
+            <div style='display:flex;height:12px;width:150px;border-radius:4px;overflow:hidden;'>
+                <div style='background:#cde2fb;flex:1;'></div>
+                <div style='background:#9ec5f4;flex:1;'></div>
+                <div style='background:#6da7ec;flex:1;'></div>
+                <div style='background:#3987e5;flex:1;'></div>
+                <div style='background:#256abf;flex:1;'></div>
+                <div style='background:#184f95;flex:1;'></div>
+                <div style='background:#0d366b;flex:1;'></div>
+            </div>
+            <span><b>Mayor volumen</b></span>
         </div>
-        <span><b>Mayor volumen</b></span>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+        """,
+        unsafe_allow_html=True,
+    )
 
-fig_map = px.choropleth(
-    map_df,
-    geojson=geojson,
-    locations="codcuenca",
-    featureidkey="properties.codcuenca",
-    color="volumen",
-    color_continuous_scale=SEQ_SCALE,
-    hover_name="nombre_cuenca",
-    hover_data={"codcuenca": True, "volumen": ":,.0f", "n_obras": True},
-)
-fig_map.update_geos(fitbounds="locations", visible=False)
-fig_map.update_layout(
-    margin=dict(l=0, r=0, t=0, b=0),
-    coloraxis_showscale=False,
-    height=500,
-)
-st.plotly_chart(fig_map, use_container_width=True)
-
-st.markdown("---")
+    fig_map = px.choropleth(
+        map_df,
+        geojson=geojson,
+        locations="codcuenca",
+        featureidkey="properties.codcuenca",
+        color="volumen",
+        color_continuous_scale=SEQ_SCALE,
+        hover_name="nombre_cuenca",
+        hover_data={"codcuenca": True, "volumen": ":,.0f", "n_obras": True},
+    )
+    fig_map.update_geos(fitbounds="locations", visible=False)
+    fig_map.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        coloraxis_showscale=False,
+        height=500,
+    )
+    st.plotly_chart(fig_map, use_container_width=True)
+    st.markdown("---")
 
 
 # --------------------------------------------------------------------------
