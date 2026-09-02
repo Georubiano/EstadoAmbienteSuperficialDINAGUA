@@ -1,15 +1,12 @@
 """
 Balance hídrico por cuenca nivel 2 — app de Streamlit.
 
-Muestra, por cada cuenca nivel 2 de Uruguay, el volumen total concedido
-(solicitudes de aprovechamiento hídrico) y la cantidad de obras por tipo
-(represas, tajamares, tanques, reservorios).
+Muestra, por cada cuenca nivel 2 de Uruguay, el volumen total concedido,
+el volumen de embalse y la cantidad de obras por tipo y uso.
 
-Datos de entrada (carpeta data/):
-  - solicitudes_limpio.csv : una fila por solicitud/obra, ya unificada
-    a partir de las 6 planillas originales (una por cuenca nivel 1).
-  - cuencas_n2.geojson     : polígonos de las 48 cuencas nivel 2
-    (capa "c098"), con la propiedad `codcuenca` para el join.
+Datos de entrada:
+  - Archivos Excel procesados en la raíz (.xlsx)
+  - cuencas_n2.geojson : polígonos de las 48 cuencas nivel 2
 
 Ejecutar localmente:
     streamlit run streamlit_app.py
@@ -25,8 +22,6 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import pydeck as pdk
 import streamlit as st
-
-DATA_DIR = Path(__file__).parent / "data"
 
 # App 100% modo oscuro: template de Plotly + tema de Streamlit (.streamlit/config.toml)
 pio.templates.default = "plotly_dark"
@@ -111,45 +106,62 @@ def load_data():
     df = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
     df.columns = [c.strip() for c in df.columns]
 
-    # Mapeo exacto de columnas de los Excel
+    # Mapeo flexible de columnas clave
     rename_map = {}
     for col in df.columns:
         col_lower = col.lower()
-        if "codigo cuencas de nivel 2" in col_lower:
+        if "nivel 2" in col_lower and ("codigo" in col_lower or "cod" in col_lower):
             rename_map[col] = "codcuenca"
-        elif "volumen" == col_lower:
+        elif col_lower == "volumen":
             rename_map[col] = "volumen"
         elif "embalse" in col_lower and "vol" in col_lower:
             rename_map[col] = "volumen_embalse"
-        elif col_lower == "latitud":
+        elif col_lower in ["latitud", "lat"]:
             rename_map[col] = "lat"
-        elif col_lower == "longitud":
+        elif col_lower in ["longitud", "lon", "long"]:
             rename_map[col] = "lon"
         elif col_lower == "uso":
             rename_map[col] = "uso"
-        elif "tipo de obra" in col_lower:
+        elif "tipo de obra" in col_lower or "tipo obra" in col_lower:
             rename_map[col] = "tipo_obra_agr"
 
     df = df.rename(columns=rename_map)
+
+    if "codcuenca" not in df.columns:
+        df["codcuenca"] = 0
     df["codcuenca"] = pd.to_numeric(df["codcuenca"], errors="coerce").fillna(0).astype(int)
 
-    with open("cuencas_n2.geojson", encoding="utf-8") as f:
-        geojson = json.load(f)
+    if "volumen" not in df.columns:
+        df["volumen"] = 0.0
+    df["volumen"] = pd.to_numeric(df["volumen"], errors="coerce").fillna(0.0)
 
-    props = pd.DataFrame([feat["properties"] for feat in geojson["features"]])
-    props["codcuenca"] = props["codcuenca"].astype(int)
-    props = props.rename(columns={"nombre_cue": "nombre_cuenca", "area": "area_km2"})
-    props = props[["codcuenca", "nombre_cuenca", "area_km2", "cabecera"]]
+    if "volumen_embalse" not in df.columns:
+        df["volumen_embalse"] = 0.0
+    df["volumen_embalse"] = pd.to_numeric(df["volumen_embalse"], errors="coerce").fillna(0.0)
+
+    geojson_path = Path("cuencas_n2.geojson")
+    if geojson_path.exists():
+        with open(geojson_path, encoding="utf-8") as f:
+            geojson = json.load(f)
+    else:
+        geojson = {"type": "FeatureCollection", "features": []}
+
+    props = pd.DataFrame([feat["properties"] for feat in geojson["features"]]) if geojson["features"] else pd.DataFrame(columns=["codcuenca", "nombre_cue", "area", "cabecera"])
+    if not props.empty:
+        props["codcuenca"] = props["codcuenca"].astype(int)
+        props = props.rename(columns={"nombre_cue": "nombre_cuenca", "area": "area_km2"})
+        props = props[["codcuenca", "nombre_cuenca", "area_km2", "cabecera"]]
+    else:
+        props = pd.DataFrame(columns=["codcuenca", "nombre_cuenca", "area_km2", "cabecera"])
 
     return df, geojson, props
 
 
 df, geojson, cuencas_meta = load_data()
 
-nombre_por_codigo = dict(zip(cuencas_meta["codcuenca"], cuencas_meta["nombre_cuenca"]))
-n1_por_codigo = df.groupby("codcuenca")["cuenca_n1"].agg(
-    lambda s: s.mode().iat[0] if not s.empty else "Desconocido").to_dict()
-codigos_sin_poligono = sorted(set(df["codcuenca"]) - set(cuencas_meta["codcuenca"]))
+nombre_por_codigo = dict(zip(cuencas_meta["codcuenca"], cuencas_meta["nombre_cuenca"])) if not cuencas_meta.empty else {}
+n1_por_codigo = df.groupby("codcuenca")["cuenca_n1"].agg(lambda s: s.mode().iat[0] if not s.empty else "Desconocido").to_dict() if not df.empty else {}
+codigos_sin_poligono = sorted(set(df["codcuenca"]) - set(cuencas_meta["codcuenca"])) if not cuencas_meta.empty else []
 
 
 # --------------------------------------------------------------------------
@@ -157,7 +169,7 @@ codigos_sin_poligono = sorted(set(df["codcuenca"]) - set(cuencas_meta["codcuenca
 # --------------------------------------------------------------------------
 st.sidebar.header("Filtros")
 
-n1_options = sorted(df["cuenca_n1"].dropna().unique())
+n1_options = sorted(df["cuenca_n1"].dropna().unique()) if not df.empty else []
 n1_selected = st.sidebar.multiselect(
     "Cuenca nivel 1", n1_options, default=n1_options,
 )
@@ -166,14 +178,12 @@ search = st.sidebar.text_input("Buscar cuenca nivel 2 (nombre o código)")
 
 st.sidebar.markdown("---")
 st.sidebar.caption(
-    "Fuente: 6 planillas de solicitudes de aprovechamiento hídrico "
-    "y shapefile de cuencas nivel 2 (capa c098)."
+    "Fuente: Planillas procesadas de solicitudes de aprovechamiento hídrico "
+    "y shapefile de cuencas nivel 2."
 )
-if codigos_sin_poligono:
-    st.sidebar.caption(f"Nota: la cuenca {codigos_sin_poligono} no tiene polígono en el shapefile.")
 
-dff = df[df["cuenca_n1"].isin(n1_selected)].copy()
-if search:
+dff = df[df["cuenca_n1"].isin(n1_selected)].copy() if not df.empty else df
+if search and not dff.empty:
     s = search.strip().lower()
     mask = (
         dff["codcuenca"].astype(str).str.contains(s)
@@ -193,23 +203,23 @@ por_cuenca = (
     dff.groupby("codcuenca")
     .agg(
         volumen=("volumen", "sum"),
-        volumen_embalse=("volumen_embalse", "sum") if "volumen_embalse" in dff.columns else ("volumen", "sum"),
+        volumen_embalse=("volumen_embalse", "sum"),
         n_obras=("volumen", "count")
     )
     .reset_index()
 )
-por_cuenca["nombre_cuenca"] = por_cuenca["codcuenca"].map(nombre_por_codigo)
+por_cuenca["nombre_cuenca"] = por_cuenca["codcuenca"].map(nombre_por_codigo).fillna("Sin nombre")
 por_cuenca["cuenca_n1"] = por_cuenca["codcuenca"].map(n1_por_codigo)
 por_cuenca["area_km2"] = por_cuenca["codcuenca"].map(
     dict(zip(cuencas_meta["codcuenca"], cuencas_meta["area_km2"]))
-)
+).fillna(0)
 por_cuenca = por_cuenca.sort_values("volumen", ascending=False)
 
 tipo_por_cuenca = (
     dff.pivot_table(
         index="codcuenca", columns="tipo_obra_agr", values="volumen", aggfunc="count", fill_value=0
     )
-    .reindex(columns=TIPOS_ORDER, fill_value=0)
+    .reindex(columns=TIPOS_ORDER, fill_value=0) if "tipo_obra_agr" in dff.columns else pd.DataFrame(index=por_cuenca["codcuenca"])
 )
 
 
@@ -218,16 +228,18 @@ tipo_por_cuenca = (
 # --------------------------------------------------------------------------
 st.title("💧 Derechos de uso otorgados clasificados por volúmenes y obras en cuencas nivel 2")
 st.caption(
-    f"{por_cuenca.shape[0]} cuencas nivel 2 · {len(n1_selected)} de 6 cuencas nivel 1 · "
+    f"{por_cuenca.shape[0]} cuencas nivel 2 · {len(n1_selected)} de {len(n1_options)} cuencas nivel 1 · "
     f"{len(dff):,} solicitudes".replace(",", ".")
 )
 
-c1, c2, c3 = st.columns(3)
+c1, c2, c3, c4 = st.columns(4)
 c1.metric("Volumen total", f"{dff['volumen'].sum() / 1e6:,.1f} hm³".replace(",", "."))
-c2.metric("Obras registradas", f"{len(dff):,}".replace(",", "."))
-c3.metric("Cuencas nivel 2", f"{por_cuenca.shape[0]}")
+c2.metric("Vol. Embalse", f"{dff['volumen_embalse'].sum() / 1e6:,.1f} hm³".replace(",", "."))
+c3.metric("Obras registradas", f"{len(dff):,}".replace(",", "."))
+c4.metric("Cuencas nivel 2", f"{por_cuenca.shape[0]}")
 
 st.markdown("---")
+
 
 # --------------------------------------------------------------------------
 # Mapa Coroplético (GeoJSON Nivel 2)
@@ -238,7 +250,6 @@ map_df = por_cuenca[por_cuenca["codcuenca"].isin(
     [f["properties"]["codcuenca"] for f in geojson["features"]]
 )]
 
-# Leyenda visual para el mapa coroplético de volúmenes (rampa de azules)
 st.markdown(
     """
     <div style='display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12px;color:#ccc;'>
@@ -271,24 +282,28 @@ fig_map = px.choropleth(
 fig_map.update_geos(fitbounds="locations", visible=False)
 fig_map.update_layout(
     margin=dict(l=0, r=0, t=0, b=0),
-    coloraxis_showscale=False,  # Ocultamos la barra vertical por defecto para usar la leyenda horizontal limpia
-    height=700,
+    coloraxis_showscale=False,
+    height=500,
 )
 st.plotly_chart(fig_map, use_container_width=True)
 
 st.markdown("---")
+
 
 # --------------------------------------------------------------------------
 # Distribución geográfica de los derechos de uso (puntos)
 # --------------------------------------------------------------------------
 st.header("🗺️ Distribución geográfica de los derechos de uso")
 
-df_mapa = dff[["lat", "lon", "uso", "volumen", "tipo_obra_agr"]].copy()
-df_mapa["lat"] = pd.to_numeric(df_mapa["lat"], errors="coerce")
-df_mapa["lon"] = pd.to_numeric(df_mapa["lon"], errors="coerce")
-df_mapa = df_mapa[
-    df_mapa["lat"].between(-35.5, -30.0) & df_mapa["lon"].between(-59.5, -53.0)
+if "lat" in dff.columns and "lon" in dff.columns:
+    df_mapa = dff[["lat", "lon", "uso", "volumen", "tipo_obra_agr"]].copy() if "uso" in dff.columns and "tipo_obra_agr" in dff.columns else dff.copy()
+    df_mapa["lat"] = pd.to_numeric(df_mapa["lat"], errors="coerce")
+    df_mapa["lon"] = pd.to_numeric(df_mapa["lon"], errors="coerce")
+    df_mapa = df_mapa[
+        df_mapa["lat"].between(-35.5, -30.0) & df_mapa["lon"].between(-59.5, -53.0)
     ].dropna(subset=["lat", "lon"])
+else:
+    df_mapa = pd.DataFrame()
 
 if df_mapa.empty:
     st.warning("No hay puntos georreferenciados para los filtros seleccionados.")
@@ -299,7 +314,7 @@ else:
         horizontal=True,
     )
 
-    if modo_mapa == "Tipo de uso":
+    if modo_mapa == "Tipo de uso" and "uso" in df_mapa.columns:
         usos_unicos = sorted(df_mapa["uso"].dropna().unique())
         tab10 = plt.colormaps["tab10"].resampled(max(len(usos_unicos), 1))
         color_map = {}
@@ -331,10 +346,10 @@ else:
                 map_style=MAPA_ESTILO,
                 tooltip={"text": "Uso: {uso}"},
             ),
-            height=600,
+            height=450,
         )
 
-    elif modo_mapa == "Tipo de obra":
+    elif modo_mapa == "Tipo de obra" and "tipo_obra_agr" in df_mapa.columns:
         df_mapa["color_tipo"] = df_mapa["tipo_obra_agr"].apply(
             lambda t: TIPO_COLORS_RGBA.get(t, [150, 150, 150, 180])
         )
@@ -363,12 +378,13 @@ else:
                 map_style=MAPA_ESTILO,
                 tooltip={"text": "Tipo de obra: {tipo_obra_agr}"},
             ),
-            height=600,
+            height=450,
         )
 
     else:
         df_mapa_vol = df_mapa.dropna(subset=["volumen"]).copy()
-        vol_p95 = df_mapa_vol["volumen"].quantile(0.95) or 1
+        vol_p95 = df_mapa_vol["volumen"].quantile(0.95) if not df_mapa_vol.empty else 1
+        vol_p95 = vol_p95 if vol_p95 > 0 else 1
         df_mapa_vol["vol_norm"] = (df_mapa_vol["volumen"].clip(upper=vol_p95) / vol_p95).fillna(0)
         cmap_vol = plt.colormaps["coolwarm"]
         df_mapa_vol["color"] = df_mapa_vol["vol_norm"].apply(
@@ -376,8 +392,8 @@ else:
         )
         df_mapa_vol["radio"] = (1500 + df_mapa_vol["vol_norm"] * 6500).astype(int)
 
-        vol_min = int(df_mapa_vol["volumen"].min())
-        vol_med = int(df_mapa_vol["volumen"].median())
+        vol_min = int(df_mapa_vol["volumen"].min()) if not df_mapa_vol.empty else 0
+        vol_med = int(df_mapa_vol["volumen"].median()) if not df_mapa_vol.empty else 0
         vol_max = int(vol_p95)
         r_b, g_b, b_b, _ = cmap_vol(0.0)
         r_m, g_m, b_m, _ = cmap_vol(0.5)
@@ -414,10 +430,14 @@ else:
                 map_style=MAPA_ESTILO,
                 tooltip={"text": "Volumen: {volumen} m³\nUso: {uso}"},
             ),
-            height=600,
+            height=450,
         )
+
+st.markdown("---")
+
+
 # --------------------------------------------------------------------------
-# Detalle por cuenca — cantidad de obras por tipo y uso
+# Detalle por cuenca — cantidad de obras por tipo y uso (Likert)
 # --------------------------------------------------------------------------
 st.subheader("Cantidad de obras")
 opciones = ["— Total de la selección —"] + [
@@ -436,22 +456,27 @@ else:
 if dff_sel.empty:
     st.warning("No hay datos para esta cuenca con los filtros actuales.")
 else:
-    pivot_usos = (
-        dff_sel.pivot_table(
-            index="tipo_obra_agr", columns="uso", values="volumen", aggfunc="count", fill_value=0
+    if "tipo_obra_agr" in dff_sel.columns and "uso" in dff_sel.columns:
+        pivot_usos = (
+            dff_sel.pivot_table(
+                index="tipo_obra_agr", columns="uso", values="volumen", aggfunc="count", fill_value=0
+            )
+            .reindex(index=TIPOS_ORDER, fill_value=0)
         )
-        .reindex(index=TIPOS_ORDER, fill_value=0)
-    )
+    else:
+        pivot_usos = pd.DataFrame()
 
-    usos_unicos = sorted(dff_sel["uso"].dropna().unique())
-    tab10 = plt.colormaps["tab10"].resampled(max(len(usos_unicos), 1))
+    if pivot_usos.empty:
+        st.info("No hay suficiente desglose por tipo de obra y uso.")
+    else:
+        usos_unicos = sorted(dff_sel["uso"].dropna().unique()) if "uso" in dff_sel.columns else []
+        tab10 = plt.colormaps["tab10"].resampled(max(len(usos_unicos), 1))
 
-    fig_tipo = go.Figure()
-    for i, uso_col in enumerate(pivot_usos.columns):
-        r, g, b, _ = tab10(i)
-        hex_color = "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+        fig_tipo = go.Figure()
+        for i, uso_col in enumerate(pivot_usos.columns):
+            r, g, b, _ = tab10(i)
+            hex_color = "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
 
-        if uso_col in pivot_usos.columns:
             fig_tipo.add_trace(go.Bar(
                 x=pivot_usos[uso_col],
                 y=pivot_usos.index,
@@ -460,18 +485,19 @@ else:
                 marker_color=hex_color,
             ))
 
-    fig_tipo.update_layout(
-        barmode="stack",
-        title=titulo,
-        height=450,
-        margin=dict(l=0, r=10, t=50, b=0),
-        xaxis_title="Cantidad de obras",
-        yaxis=dict(autorange="reversed"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    st.plotly_chart(fig_tipo, use_container_width=True)
+        fig_tipo.update_layout(
+            barmode="stack",
+            title=titulo,
+            height=450,
+            margin=dict(l=0, r=10, t=50, b=0),
+            xaxis_title="Cantidad de obras",
+            yaxis=dict(autorange="reversed"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_tipo, use_container_width=True)
 
 st.markdown("---")
+
 
 # --------------------------------------------------------------------------
 # Obras por tipo, cuenca por cuenca
@@ -501,7 +527,7 @@ fig_obras_todas = px.bar(
 )
 fig_obras_todas.update_traces(textposition="outside")
 fig_obras_todas.update_layout(
-    height=max(altura_todas, 500), margin=dict(l=0, r=60, t=30, b=0), showlegend=False
+    height=max(altura_todas, 400), margin=dict(l=0, r=60, t=30, b=0), showlegend=False
 )
 fig_obras_todas.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
 fig_obras_todas.update_yaxes(matches=None)
@@ -510,25 +536,22 @@ st.plotly_chart(fig_obras_todas, use_container_width=True)
 
 st.markdown("---")
 
+
 # --------------------------------------------------------------------------
 # Tabla completa — cuencas nivel 1
 # --------------------------------------------------------------------------
 st.subheader("Tabla completa — cuencas nivel 1")
 
-# Detectar columna de embalse
-col_embalse_n1 = next((c for c in dff.columns if "embalse" in c.lower() or "volúmen" in c.lower()), None)
-
 por_cuenca_n1 = (
     dff.groupby("cuenca_n1")
     .agg(
         volumen=("volumen", "sum"),
-        volumen_embalse=(col_embalse_n1, "sum") if col_embalse_n1 else ("volumen", "sum"),
+        volumen_embalse=("volumen_embalse", "sum"),
         n_obras=("volumen", "count")
     )
     .reset_index()
 )
 
-# Calcular el área total sumando las cuencas nivel 2 asociadas a cada nivel 1
 area_por_n1 = por_cuenca.groupby("cuenca_n1")["area_km2"].sum().reset_index()
 por_cuenca_n1 = por_cuenca_n1.merge(area_por_n1, on="cuenca_n1", how="left")
 por_cuenca_n1 = por_cuenca_n1.sort_values("volumen", ascending=False).reset_index(drop=True)
@@ -556,6 +579,7 @@ st.download_button(
 
 st.markdown("---")
 
+
 # --------------------------------------------------------------------------
 # Tabla completa — cuencas nivel 2
 # --------------------------------------------------------------------------
@@ -582,4 +606,3 @@ st.download_button(
 
 with st.expander("Ver solicitudes individuales (detalle fila por fila)"):
     st.dataframe(dff, use_container_width=True, hide_index=True)
-
