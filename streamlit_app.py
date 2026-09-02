@@ -475,10 +475,54 @@ st.plotly_chart(fig_obras_todas, use_container_width=True)
 
 st.markdown("---")
 
+# --------------------------------------------------------------------------
+# Tabla completa — cuencas nivel 1
+# --------------------------------------------------------------------------
+st.subheader("Tabla completa — cuencas nivel 1")
+
+# Detectar columna de embalse
+col_embalse_n1 = next((c for c in dff.columns if "embalse" in c.lower() or "volúmen" in c.lower()), None)
+
+por_cuenca_n1 = (
+    dff.groupby("cuenca_n1")
+    .agg(
+        volumen=("volumen", "sum"),
+        volumen_embalse=(col_embalse_n1, "sum") if col_embalse_n1 else ("volumen", "sum"),
+        n_obras=("volumen", "count")
+    )
+    .reset_index()
+)
+
+# Calcular el área total sumando las cuencas nivel 2 asociadas a cada nivel 1
+area_por_n1 = por_cuenca.groupby("cuenca_n1")["area_km2"].sum().reset_index()
+por_cuenca_n1 = por_cuenca_n1.merge(area_por_n1, on="cuenca_n1", how="left")
+por_cuenca_n1 = por_cuenca_n1.sort_values("volumen", ascending=False).reset_index(drop=True)
+
+tabla_n1 = por_cuenca_n1[["cuenca_n1", "area_km2", "volumen", "volumen_embalse", "n_obras"]]
+tabla_n1.columns = ["Cuenca nivel 1", "Área (km²)", "Volumen (m³)", "Vol. Embalse (m³)", "Obras"]
+
+st.dataframe(
+    tabla_n1,
+    use_container_width=True,
+    hide_index=True,
+    column_config={
+        "Volumen (m³)": st.column_config.NumberColumn(format="%.0f"),
+        "Vol. Embalse (m³)": st.column_config.NumberColumn(format="%.0f"),
+        "Área (km²)": st.column_config.NumberColumn(format="%.0f"),
+    },
+)
+
+st.download_button(
+    "Descargar tabla Nivel 1 (CSV)",
+    tabla_n1.to_csv(index=False).encode("utf-8"),
+    file_name="volumen_obras_por_cuenca_n1.csv",
+    mime="text/csv",
+)
+
+st.markdown("---")
 
 # --------------------------------------------------------------------------
-# --------------------------------------------------------------------------
-# Tabla completa
+# Tabla completa — cuencas nivel 2
 # --------------------------------------------------------------------------
 st.subheader("Tabla completa — cuencas nivel 2")
 tabla = por_cuenca[["codcuenca", "nombre_cuenca", "cuenca_n1", "area_km2", "volumen", "volumen_embalse", "n_obras"]].reset_index(drop=True)
@@ -495,7 +539,7 @@ st.dataframe(
 )
 
 st.download_button(
-    "Descargar tabla (CSV)",
+    "Descargar tabla Nivel 2 (CSV)",
     tabla.to_csv(index=False).encode("utf-8"),
     file_name="volumen_obras_por_cuenca_n2.csv",
     mime="text/csv",
