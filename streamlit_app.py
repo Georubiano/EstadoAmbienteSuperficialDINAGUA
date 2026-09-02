@@ -148,23 +148,19 @@ if dff.empty:
 
 
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # Agregaciones
 # --------------------------------------------------------------------------
-# Detectar dinámicamente el nombre de la columna de embalse si existe
-col_embalse = next((c for c in dff.columns if "embalse" in c.lower()), None)
-
-agg_dict = {
-    "volumen": ("volumen", "sum"),
-    "n_obras": ("volumen", "count"),
-}
-if col_embalse:
-    agg_dict["Volúmen de Embalse"] = (col_embalse, "sum")
-else:
-    agg_dict["Volúmen de Embalse"] = ("volumen", "sum")
+# Detectar el nombre exacto de la columna de embalse (maneja tildes y mayúsculas)
+col_embalse = next((c for c in dff.columns if "embalse" in c.lower() or "volúmen" in c.lower()), None)
 
 por_cuenca = (
     dff.groupby("codcuenca")
-    .agg(**agg_dict)
+    .agg(
+        volumen=("volumen", "sum"),
+        volumen_embalse=(col_embalse, "sum") if col_embalse else ("volumen", "sum"),
+        n_obras=("volumen", "count")
+    )
     .reset_index()
 )
 por_cuenca["nombre_cuenca"] = por_cuenca["codcuenca"].map(nombre_por_codigo)
