@@ -4,7 +4,11 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="3e105e89-f6be-42e0-ac35-6af6fa206da9" name="Changes" comment="Merge remote-tracking branch 'origin/main'" />
+    <list default="true" id="3e105e89-f6be-42e0-ac35-6af6fa206da9" name="Changes" comment="prueba">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/prepare_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/prepare_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/streamlit_app.py" beforeDir="false" afterPath="$PROJECT_DIR$/streamlit_app.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -13,25 +17,25 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "Georubiano"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;Georubiano&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/Georubiano/EstadoAmbienteSuperficialDINAGUA.git",
-    "accountId": "2d99681b-eff0-45e9-9859-05537d55100b"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/Georubiano/EstadoAmbienteSuperficialDINAGUA.git&quot;,
+    &quot;accountId&quot;: &quot;2d99681b-eff0-45e9-9859-05537d55100b&quot;
   }
-}]]></component>
+}</component>
   <component name="ProblemsViewState">
     <option name="selectedTabId" value="ProjectErrors" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 5,
-  "fromUser": false
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5,
+  &quot;fromUser&quot;: false
+}</component>
   <component name="ProjectId" id="3IjtJ4f1GWC2iKopyhSCiNxztuj" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -51,6 +55,7 @@
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "preferences.keymap",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
@@ -69,7 +74,9 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1788289732508</updated>
-      <workItem from="1788289733531" duration="4486000" />
+      <workItem from="1788289733531" duration="7652000" />
+      <workItem from="1788350549248" duration="1754000" />
+      <workItem from="1788353194111" duration="9437000" />
     </task>
     <task id="LOCAL-00001" summary="cambio en mapa y C3">
       <option name="closed" value="true" />

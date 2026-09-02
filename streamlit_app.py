@@ -26,10 +26,12 @@ import plotly.io as pio
 import pydeck as pdk
 import streamlit as st
 
+
+
 DATA_DIR = Path(__file__).parent / "data"
 
-# App 100% modo oscuro: template de Plotly + tema de Streamlit (.streamlit/config.toml)
-pio.templates.default = "plotly_dark"
+# App en modo diurno: template claro de Plotly
+pio.templates.default = "plotly"  # light/diurno theme
 
 # Orden fijo de tipos de obra
 TIPOS_ORDER = [
@@ -73,7 +75,7 @@ def hex_a_rgba(hex_color, alpha=200):
 
 TIPO_COLORS_RGBA = {k: hex_a_rgba(v) for k, v in TIPO_COLORS.items()}
 
-MAPA_ESTILO = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+MAPA_ESTILO = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"  # CartoDB Positron (light)
 
 
 def miles(n):
@@ -84,8 +86,11 @@ st.set_page_config(
     page_title="Balance hídrico por cuenca",
     page_icon="💧",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
+# Plotly en light theme
+pio.templates.default = "plotly"
 
 # --------------------------------------------------------------------------
 # Carga de datos
